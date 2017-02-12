@@ -1,0 +1,11 @@
+Sending:
+- Lodde tilbake R2=10k, C2=10n
+- Starte på mottak
+- Dali-click mod: 3.3k resistor over diode D1 som har vesentlig kapasitans
+- Fortsette på python-skript for addressering
+
+Mottak:
+Etter første fallende flanke, vent en kvart bit.
+Interrupt på pin-change starter timer som teller 3/4 bit.
+På timer-interrupt samples pinnen og forbereder ny mottak.
+

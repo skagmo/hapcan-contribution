@@ -1,0 +1,9 @@
+
+CAN messages:
+- button (for indirect control via memory frames)
+- direct control frame instruction SET TO, TOGGLE which will be translated to DALI messages
+- direct control frame instruction DALI_SHORT and DALI_LONG (for direct control of DALI devices during e.g. commissioning)
+
+DALI messages:
+- Short message forwarded to CAN bus
+- Long message forwarded to CAN bus

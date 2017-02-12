@@ -1,0 +1,6 @@
+PCB observations:
+- DALI TX: Cap C4 holds 5,12 V steady even with rapid transmission. Good.
+- DALI TX: The bus is held low a little too long, due to Q3 gate discharge time through R1 and opto turn-off time. R1 10k replaced with 4,7k. Much better.
+- DALI RX: U4 starts conducting really quick, but is rather slow at getting up to 3.3 v again.
+- DALI RX: Current limiter current is slightly low with 33k, 10k and 330 ohm?
+

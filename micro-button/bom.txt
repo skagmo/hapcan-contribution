@@ -1,0 +1,16 @@
+H_Bx			JST-PH 3P
+R2-R5,R1,R8		10k resistor hjemme
+H_ICSP			-
+C1,C2			12p
+R7				51 kohm
+PDI123-diode	Behøver bare å tåle 100-200 mA
+U8				Reg (40V): TPS7B6950-Q1 (0.1u til 10u inn, 4.7u ut), eller MCP1804?
+X1				8 MHz XOSC
+C5,C9			100n
+H_BUS,H_BUS2	DF11-06
+C6				4.7u-10u 0805, minst 5V
+C7				4.7u-10u 1210, minst 28 v
+L1,L2			BLM21A102SPT, bare general purpose drossel?
+D3				P6SMB30C
+U1				PIC
+U2				MCP2561	Hjemme, evt. ikke samme type

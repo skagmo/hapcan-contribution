@@ -1,0 +1,8 @@
+- If reflow soldering, most footprints are OK
+- Change C7 to 1206
+- Wire up both pin 5 and 8 on CAN IC. Pull-down for slew rate control?
+- Change D2 footprint to SOD123 (?)
+- Change DALI components to 0603
+- Change optocoupler drive to active low and open-drain on PIC?
+- Add OSHW logo?
+

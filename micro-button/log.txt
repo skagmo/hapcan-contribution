@@ -1,0 +1,21 @@
+MCP1804T (28 V max) har feil pinout!
+TI CAN-transceiver var bare 3.3 V!
+
+SN 1-2:
+SN65HVD230DRG4
+Unidir TVS! (ikke CAT)
+18pf XTAL (MAAJ)
+D1: 1N4148
+U3: MCP1790T (30 V max)
+C7: 4,7u 25V
+C9: 0,1u 25V
+
+3-5:
+Bidir TVS
+12pf xtal
+
+6-11:
+UA78M05QDCYRG4C1 (25 V max, men 35 V abs. max)
+
+12-14:
+Nytt PCB, med 3.3 V SMPS! Ingen spenningsdeler

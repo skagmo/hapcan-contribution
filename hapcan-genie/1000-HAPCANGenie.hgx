@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ProgramBlock xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ConditionType>OnTrue</ConditionType>
+  <Conditions />
+  <Commands />
+  <ScriptCondition>Program.Setup(()=&gt;{
+     Program.AddOption("address", "10.0.0.1", "IP Address", "text");
+     Program.AddOption("port", "10001", "Port", "text");
+     Program.AddOption("auto_add", "true", "Auto add devices", "checkbox");
+});
+
+return true;
+</ScriptCondition>
+  <ScriptSource>var config_address = Program.Option("address").Value;
+var config_port = Convert.ToInt32(Program.Option("port").Value);
+bool auto_add = Convert.ToBoolean(Program.Option("auto_add").Value);
+var hc_domain = "HomeAutomation.HAPCAN";
+
+Func&lt;string, string, string, string, bool&gt; try_add_module = (string domain, string address, string deviceType, string widget) =&gt; {
+    if (auto_add){
+        Program.Notify("Found " + deviceType, address + " added");
+        Program.AddVirtualModule(domain, address, deviceType, widget);
+      	return true;
+    }
+    else{
+        Program.Notify("Found " + deviceType, address + " NOT added");
+      	return false;
+    }
+};
+
+Func&lt;string, string, string, string, bool&gt; module_exists = (string domain, string address, string deviceType, string widget) =&gt; {
+    var module = Modules.InDomain(hc_domain).WithAddress(address).Get();
+    if (module.Instance != null) return true;
+  	else if (try_add_module(domain, address, deviceType, widget)) return true;
+    return false;
+};
+
+Func&lt;byte[], byte&gt; calc_checksum = (byte[] message) =&gt; {
+	byte checksum = 0;
+	for(int j=1; j&lt;13; j++) checksum += message[j];
+	return checksum;
+};
+
+// Received data from CAN bus
+Action&lt;byte[]&gt; HandleMessageReceived = (byte[] message) =&gt; {
+	int frame_type = (message[1] &lt;&lt; 4) | ((message[2]&amp;0xf0) &gt;&gt; 4);
+	int response_flag = message[2] &amp; 0x01;
+	int node_nr = message[3];
+  	int group_nr = message[4];
+
+	switch(frame_type){
+      	// "Relay" frame
+		case 0x302:
+      		{
+                int channel = message[7];
+                int status = message[8];
+                string address = string.Format("{0:X2}{1:X2}{2:X2}", node_nr, group_nr, channel);
+                if (module_exists(hc_domain, address, "Switch", "homegenie/generic/switch")){
+                    var module = Modules.InDomain(hc_domain).WithAddress(address).Get();
+                    if (status == 0) Program.RaiseEvent(module, "Status.Level", "0", "");
+                    else Program.RaiseEvent(module, "Status.Level", "1", "");
+                }
+            }
+      		break;
+      
+      	// "Current temperature" frame
+      	case 0x304:
+      		// Data type in message == temperature
+      		if (message[7] == 0x11){
+                float temp = ( ((message[8]&amp;0x7)&lt;&lt;8) | message[9] ) / (float)16.0;
+              	if ((message[8] &amp; 0xf8) != 0) temp = -temp;
+                string address = string.Format("{0:X2}{1:X2}", node_nr, group_nr);
+                if (module_exists(hc_domain, address, "Sensor", "homegenie/generic/sensor")){
+                    var module = Modules.InDomain(hc_domain).WithAddress(address).Get();
+                    Program.RaiseEvent(module, "Sensor.Temperature", temp.ToString(), "");
+                }
+        	}
+      		break;
+      
+      	// "Dimmer" frame
+      	case 0x306:
+      		{
+        		byte channel = message[7];
+        		byte level = message[8];
+                
+              	// Only channel 1 used (over 0xf0 is used for diagnostics)
+              	if (channel == 0x01){
+                	string address = string.Format("{0:X2}{1:X2}", node_nr, group_nr);
+                  	var module = Modules.InDomain(hc_domain).WithAddress(address).Get();
+                  	if (module.Instance == null){
+                    	if (!try_add_module(hc_domain, address, "Dimmer", "homegenie/generic/dimmer")) break;
+                      	module = Modules.InDomain(hc_domain).WithAddress(address).Get();
+                      	module.Parameter("Hapcan.Type").Value = "standard_dimmer";
+                    }
+                  	Program.RaiseEvent(module, "Status.Level", ((float)level / 0xff).ToString(), "");
+                }
+            }
+      		break;
+      
+      	// "DALI dimmer" frame - this type is pending for change and randomly chosen without coordination
+      	case 0x322:
+      		{
+        		int channel = message[7];
+        		byte level = message[8];
+                
+              	// Channel 0xf0 and higher used for diagnostic messages and status
+              	if (channel &lt; 0xf0){
+                	string address = string.Format("{0:X2}{1:X2}{2:X2}", node_nr, group_nr, channel);
+                  	var module = Modules.InDomain(hc_domain).WithAddress(address).Get();
+                  	if (module.Instance == null){
+                    	if (!try_add_module(hc_domain, address, "Dimmer", "homegenie/generic/dimmer")) break;
+                      	module = Modules.InDomain(hc_domain).WithAddress(address).Get();
+                      	module.Parameter("Hapcan.Type").Value = "dali_dimmer";
+                    }
+                    Program.RaiseEvent(module, "Status.Level", ((float)level / 0xff).ToString(), "");
+                }
+            }
+      		break;
+      
+      	default:
+			Program.Notify("HAPCAN exception", string.Format("Unhandled type={0:X}, r_flag={1}, node={2}, grp={3}", frame_type, response_flag, node_nr, group_nr));
+      		break;
+    }
+};
+
+When.WebServiceCallReceived(hc_domain, ( args ) =&gt; {
+	string[] reqs = ((string)args).Split('/');
+	try{
+		var subdomain = reqs[0].Substring(reqs[0].LastIndexOf('.') + 1);
+		var address = reqs[1];
+		var module = Modules.InDomain(reqs[0]).WithAddress(address).Get();
+		string[] cmd = reqs[2].Split('.');
+		
+		if (cmd[0] == "Control"){
+            byte[] tx_data = new byte[15];
+          	// Todo: Add and look up HAPCAN type, not HG DeviceType
+          	if (module.IsOfDeviceType("dimmer")){
+              	switch(module.Parameter("Hapcan.Type").Value){
+					case "standard_dimmer":
+                        tx_data[9] = 0x00;
+                  		break;
+            		case "dali_dimmer":
+                  		tx_data[9] = Convert.ToByte(Convert.ToInt32(address.Substring(4, 2), 16));
+                  		break;
+                }
+                switch (cmd[1]){
+                    case "Off":
+                        tx_data[5] = 0; // Set to...
+                        tx_data[6] = 0; // Level 0
+                    	break;        
+                    case "On":
+                        tx_data[5] = 0; // Set to...
+                        tx_data[6] = 0xff; // Level 255
+                        break;
+                    case "Toggle":
+                        tx_data[5] = 1; // Toggle
+                        break;
+                    case "Level":
+                        tx_data[5] = 0; // Set to...
+                        tx_data[6] = (byte)(Convert.ToInt32(reqs[3])*255/100); // Level
+                        break;
+                }
+            }
+          	// If relay type
+          	else{
+              	// Channel
+                tx_data[6] = Convert.ToByte(1 &lt;&lt; (Convert.ToInt32(address.Substring(4, 2), 16)-1));
+                tx_data[9] = 0x00;
+                switch (cmd[1]){
+                    case "Off":
+                        tx_data[5] = 0;
+                        break;        
+                    case "On":
+                        tx_data[5] = 1;
+                        break;
+                    case "Toggle":
+                        tx_data[5] = 2;
+                        break;    
+                }
+            }
+          
+          	// Direct control frame
+            tx_data[0] = 0xaa;
+            tx_data[1] = 0x10;                              
+            tx_data[2] = 0xa0;                              
+            tx_data[3] = 0xf0;   // HG node                         
+            tx_data[4] = 0xf0;   // HG group
+            // Byte 5 and 6 already filled with instruction 1-2
+            tx_data[7] = Convert.ToByte(Convert.ToInt32(address.Substring(0, 2), 16)); // Node
+            tx_data[8] = Convert.ToByte(Convert.ToInt32(address.Substring(2, 2), 16)); // Group
+            // Byte 9 filled with instruction 3
+            tx_data[10] = 0xff;
+            tx_data[11] = 0xff;
+            tx_data[12] = 0xff;
+          	tx_data[13] = calc_checksum(tx_data);
+            tx_data[14] = 0xa5;
+            TcpClient.SendMessage(tx_data);
+        }
+      	return "{ 'ResponseValue' : 'OK' }";    
+    }
+	catch (Exception e){ 
+		Program.Notify("HAPCAN", e.Message);         
+    }
+  	return "{ 'ResponseValue' : 'ERROR' }";    
+});
+       
+Action&lt;bool&gt;
+HandleStatusChanged = (bool connected) =&gt; {
+     Program.Notify("HAPCAN", connected ? "Connected" : "Disconnected");
+};
+
+TcpClient
+    .Service(config_address)
+	.OnMessageReceived( HandleMessageReceived )
+	.OnStatusChanged( HandleStatusChanged )
+    .Connect(config_port);
+
+while (Program.IsEnabled){
+    if ( !TcpClient.IsConnected ){
+        Program.Notify("HAPCAN", "Reconnecting...");
+		TcpClient
+			.Service(config_address)
+			.OnMessageReceived( HandleMessageReceived )
+			.OnStatusChanged( HandleStatusChanged )
+			.Connect(config_port);
+    }
+	Pause(10);
+}
+
+Program.GoBackground();</ScriptSource>
+  <ScriptErrors>[]</ScriptErrors>
+  <Domain>HomeAutomation.HomeGenie.Automation</Domain>
+  <Address>1000</Address>
+  <Name>HAPCANGenie</Name>
+  <Description />
+  <Group>Skagmo</Group>
+  <Features />
+  <ActivationTime>2016-11-29T08:14:44.080356Z</ActivationTime>
+  <TriggerTime>2016-11-29T08:14:44.146124Z</TriggerTime>
+  <Type>CSharp</Type>
+  <IsEnabled>true</IsEnabled>
+</ProgramBlock>

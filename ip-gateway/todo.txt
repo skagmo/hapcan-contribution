@@ -1,0 +1,19 @@
+* /boot/config.txt
+dtparam=spi=on
+dtoverlay=mcp2515-can0,oscillator=16000000,interrupt=25
+dtoverlay=spi-bcm2835-overlay
+
+sudo /sbin/ip link set can0 up type can bitrate 125000
+
+auto can0
+iface can0 can static
+        bitrate 125000
+
+can-utils
+
+sudo apt install python3-pip
+sudo pip3 install python-can
+
+
+8.3 memory request
+[tty]aa:10:90:f0:f0:ff:ff:08:03:ff:ff:ff:ff:85:a5

@@ -1,0 +1,20 @@
+- Change schottky to SOD123
+
+Skip:
+- Change to 6 x 3,5mm screw terminal
+- No 5 V on second button port
+
+Done:
+- larger pad on hand soldered xtal
+- Smaller DF11 holes
+- Change H_TMP to match DS18B20 pinout
+- No 1-wire pull-up
+- Change standard resistors and caps to 0603
+- Switch mode regulator
+- Change 1210-cap to 1206
+- Ground in center on button ports
+- Show button number on silk screen
+
+Notater:
+MCP1804T (28 V max) har feil pinout!
+TI CAN-transceiver var bare 3.3 V!
